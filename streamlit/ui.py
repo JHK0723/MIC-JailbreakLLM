@@ -8,6 +8,7 @@ if "history" not in st.session_state:
     st.session_state.history = []
 import requests
 
+
 API_URL = "http://127.0.0.1:8000/attack"
 
 def handle_send():
