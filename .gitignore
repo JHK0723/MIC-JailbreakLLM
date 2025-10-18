@@ -3,3 +3,4 @@ backend/
 .vscode/
 ui/
 backend/
+venv
