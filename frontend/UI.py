@@ -6,6 +6,9 @@ st.set_page_config(page_title="Prompt Injection", layout="centered")
 
 if "history" not in st.session_state:
     st.session_state.history = []
+import requests
+
+API_URL = "http://127.0.0.1:8000/attack"
 
 def handle_send():
     text = st.session_state.input_box
@@ -13,16 +16,16 @@ def handle_send():
         return
     st.session_state.history.append({"role": "user", "text": text})
 
-    # mock model reply
-    secret = "apple"
-    if secret in text.lower():
-        reply = f"🤖 Congrats! You found **{secret}**"
-    else:
-        reply = "🤖 Access denied."
-    st.session_state.history.append({"role": "model", "text": reply})
+    try:
+        res = requests.post(API_URL, json={"prompt": text})
+        data = res.json()
+        reply = data.get("response", "⚠️ Backend returned no reply.")
+    except Exception as e:
+        reply = f"⚠️ Error contacting backend: {e}"
 
-    # clear safely → widget resets next render
+    st.session_state.history.append({"role": "model", "text": reply})
     st.session_state.input_box = ""
+
 
 st.title("Prompt Injection 💬")
 
