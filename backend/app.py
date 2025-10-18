@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 import logging
 
 from models.level1 import run_level
-from schemas import AttackRequest, SubmitRequest
+from .schema import AttackRequest, SubmitRequest
 
 app = FastAPI(title="Prompt Injection API")
 
