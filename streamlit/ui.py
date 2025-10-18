@@ -108,8 +108,9 @@ with c3:
         st.button("Loading...", disabled=True)
     else:
         if st.button("Clear 🧹"):
-            if st.confirm("Clear chat history? This cannot be undone."):
-                st.session_state.history.clear()
+            # if st.confirm("Clear chat history? This cannot be undone."):
+            st.session_state.history.clear()
+            st.rerun()
 
 # small footer + debug
 st.markdown("---")
