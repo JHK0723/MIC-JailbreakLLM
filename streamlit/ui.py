@@ -1,25 +1,39 @@
 import streamlit as st
 from datetime import datetime
 from streamlit_chat import message
-
 st.set_page_config(page_title="Prompt Injection", layout="centered")
-
-if "history" not in st.session_state:
-    st.session_state.history = []
 import requests
 
-API_URL = "http://127.0.0.1:8000/attack"
+
+# Track chat + team info
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "team_id" not in st.session_state:
+    st.session_state.team_id = "team_001"
+if "current_level" not in st.session_state:
+    st.session_state.current_level = 1
+API_VALIDATE = "http://127.0.0.1:8000/submit/validate"
+API_URL = "http://127.0.0.1:8000/submit/prompt"
 
 def handle_send():
     text = st.session_state.input_box
     if not text.strip():
         return
+
     st.session_state.history.append({"role": "user", "text": text})
+    
+    payload = {
+        "team_id": st.session_state.team_id,
+        "level": st.session_state.current_level,
+        "text": text
+    }
 
     try:
-        res = requests.post(API_URL, json={"prompt": text})
-        data = res.json()
-        reply = data.get("response", "⚠️ Backend returned no reply.")
+        res = requests.post(API_URL, json=payload)
+        if res.status_code == 200:
+            reply = res.text
+        else:
+            reply = f"⚠️ {res.status_code}: {res.text}"
     except Exception as e:
         reply = f"⚠️ Error contacting backend: {e}"
 
@@ -28,7 +42,42 @@ def handle_send():
 
 
 st.title("Prompt Injection 💬")
+def handle_validate():
+    pwd = st.session_state.get("validate_password", "").strip()
+    if not pwd:
+        st.warning("Enter a password to validate")
+        return
 
+    payload = {
+        "team_id": st.session_state.team_id,
+        "level": st.session_state.current_level,
+        "password": pwd
+    }
+
+    try:
+        res = requests.post(API_VALIDATE, json=payload, timeout=5)
+        if res.headers.get("Content-Type", "").lower().startswith("application/json"):
+            data = res.json()
+            valid = data.get("valid", False)
+        else:
+            # fallback: treat non-JSON as failure
+            valid = False
+    except Exception as e:
+        print(f"[validate] Error contacting backend: {e}")
+        st.error(f"Error contacting backend: {e}")
+        return
+
+    # log to server console
+    print(f"[validate] team={st.session_state.team_id} level={st.session_state.current_level} password='{pwd}' valid={valid}")
+
+    # show result in frontend
+    if valid:
+        st.success("Validation successful ✅")
+        # optionally append to chat history
+        st.session_state.history.append({"role": "system", "text": "Validation successful"})
+    else:
+        st.error("Validation unsuccessful ❌")
+        st.session_state.history.append({"role": "system", "text": "Validation unsuccessful"})
 # chat window
 chat_box = st.container()
 for i, h in enumerate(st.session_state.history):
@@ -46,7 +95,13 @@ st.text_input(
     placeholder="Try something cheeky...",
     label_visibility="collapsed",
 )
-
+st.text_input(
+    "Secret to validate:",
+    key="validate_password",
+    placeholder="Enter discovered secret to validate",
+    label_visibility="collapsed",
+)
+st.button("Validate secret 🔐", on_click=handle_validate)
 if st.button("Clear chat 🧹"):
     st.session_state.history.clear()
     st.rerun()
