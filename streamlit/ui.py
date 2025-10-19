@@ -59,22 +59,27 @@ def handle_validate():
         if res.headers.get("Content-Type", "").lower().startswith("application/json"):
             data = res.json()
             valid = data.get("valid", False)
+            next_level = data.get("next_level", None)
         else:
-            # fallback: treat non-JSON as failure
             valid = False
+            next_level = None
     except Exception as e:
         print(f"[validate] Error contacting backend: {e}")
         st.error(f"Error contacting backend: {e}")
         return
 
     # log to server console
-    print(f"[validate] team={st.session_state.team_id} level={st.session_state.current_level} password='{pwd}' valid={valid}")
+    print(f"[validate] team={st.session_state.team_id} level={st.session_state.current_level} password='{pwd}' valid={valid} next_level={next_level}")
 
-    # show result in frontend
+    # show result in frontend and advance level on success
     if valid:
         st.success("Validation successful ✅")
-        # optionally append to chat history
         st.session_state.history.append({"role": "system", "text": "Validation successful"})
+        if next_level:
+            st.session_state.current_level = next_level
+            st.info(f"Advanced to level {next_level}")
+        else:
+            st.success("All levels completed 🎉")
     else:
         st.error("Validation unsuccessful ❌")
         st.session_state.history.append({"role": "system", "text": "Validation unsuccessful"})
