@@ -6,3 +6,4 @@ backend/
 venv
 .env
 __pycache__/
+jailbreak.db
