@@ -7,7 +7,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from models.level1 import run_level
-from schema import SubmitRequest, ValidateRequest  #schema imports
+from .schema import SubmitRequest, ValidateRequest  #schema imports
 
 load_dotenv()
 
