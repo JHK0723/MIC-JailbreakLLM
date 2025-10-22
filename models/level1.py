@@ -8,7 +8,7 @@ from typing import Dict, Any, List
 
 #  Configuration 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
-DEFAULT_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "20"))
+
 MODEL_NAME = os.environ.get("OLLAMA_MODEL", "mistral")
 
 # Configure basic logging
@@ -99,8 +99,8 @@ def detect_jailbreaks(user_input: str, model_output: str) -> Dict[str, Any]:
 
 
 # Ollama call 
-
-def query_mistral(prompt: str, timeout: float = DEFAULT_TIMEOUT, options: Dict[str, Any] = None) -> str:
+OLLAMA_TIMEOUT=60
+def query_mistral(prompt: str, timeout: float = OLLAMA_TIMEOUT, options: Dict[str, Any] = None) -> str:
     """Call Ollama's local HTTP API and return the textual response.
 
     The exact response shape may differ between Ollama versions; this function assumes
@@ -156,7 +156,7 @@ def check_success(model_output: str, secret: str) -> bool:
 
 #  Orchestration 
 
-def run_level(level: Dict[str, Any], user_input: str, options: Dict[str, Any] = None, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, Any]:
+def run_level(level: Dict[str, Any], user_input: str, options: Dict[str, Any] = None, timeout: float = OLLAMA_TIMEOUT) -> Dict[str, Any]:
     """Main entrypoint for the backend to call.
 
     Returns a dictionary with keys: output, success, detectors, meta.
