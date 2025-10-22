@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_chat import message
 st.set_page_config(page_title="Prompt Injection", layout="centered")
 import requests
+import streamlit.components.v1 as components
 
 # default test team: team_name "JHK" (DB seeded). UI uses this by default.
 if "history" not in st.session_state:
@@ -85,31 +86,31 @@ def handle_validate():
             valid = data.get("valid", False)
             next_level = data.get("next_level", None)
         else:
-            valid = False
-            next_level = None
+            st.error(f"Unexpected response: {res.status_code}")
+            return
     except Exception as e:
+        print(f"[validate] Error contacting backend: {e}")
         st.error(f"Error contacting backend: {e}")
         return
 
-    # log
+    # log attempt
     print(f"[validate] team={st.session_state.team_id} level={st.session_state.current_level} password='{pwd}' valid={valid} next_level={next_level}")
 
     if valid:
         st.success("Validation successful ✅")
         st.session_state.history.append({"role": "system", "text": "Validation successful"})
+        # advance if backend returned a next level
         if next_level:
             st.session_state.current_level = next_level
             st.info(f"Advanced to level {next_level}")
         else:
+            # all levels completed -> show success popup/celebration
             st.success("All levels completed 🎉")
-            # fetch team record to show final time
-            try:
-                rec = requests.get(f"{API_TEAM}/{st.session_state.team_id}", timeout=3)
-                if rec.status_code == 200:
-                    data = rec.json()
-                    st.info(f"Overall time (sec): {data.get('overall_time_sec')}")
-            except Exception:
-                pass
+            st.balloons()
+            # small browser alert popup (executes JS in the page)
+            components.html("<script>alert('Congratulations! You completed all levels 🎉');</script>", height=0)
+        # clear the validate input
+        st.session_state.validate_password = ""
     else:
         st.error("Validation unsuccessful ❌")
         st.session_state.history.append({"role": "system", "text": "Validation unsuccessful"})
