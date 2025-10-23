@@ -4,14 +4,14 @@ import time
 import json
 import logging
 import requests
-from typing import Dict, Any, List, Generator
+from typing import Dict, Any, List, Generator, Optional
 
 # ==============================
 # CONFIGURATION
 # ==============================
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 MODEL_NAME = os.environ.get("OLLAMA_MODEL", "mistral")
-OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "180"))  # generous timeout for long generations
+OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "180"))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s - %(message)s")
@@ -97,10 +97,17 @@ def detect_jailbreaks(user_input: str, model_output: str) -> Dict[str, Any]:
 # ==============================
 # OLLAMA STREAMING CALL
 # ==============================
-def query_mistral_stream(prompt: str, timeout: float = OLLAMA_TIMEOUT, options: Dict[str, Any] = None) -> Generator[str, None, None]:
+def query_mistral_stream(
+    prompt: str, 
+    timeout: float = OLLAMA_TIMEOUT, 
+    options: Optional[Dict[str, Any]] = None
+) -> Generator[Dict[str, Any], None, None]:
     """
     Stream output from Ollama as it generates text.
-    Yields partial chunks as strings, allowing FastAPI to stream them live to clients.
+    Yields dictionaries with:
+    - 'chunk': partial text token
+    - 'done': boolean indicating if generation is complete
+    - 'error': error message if something went wrong
     """
     payload = {
         "model": MODEL_NAME,
@@ -120,15 +127,16 @@ def query_mistral_stream(prompt: str, timeout: float = OLLAMA_TIMEOUT, options: 
                     data = json.loads(line.decode("utf-8"))
                     # Ollama sends partial tokens under "response"
                     if "response" in data:
-                        yield data["response"]
-                    elif data.get("done"):
+                        yield {"chunk": data["response"], "done": False}
+                    if data.get("done"):
+                        yield {"chunk": "", "done": True}
                         break
                 except json.JSONDecodeError:
                     logger.debug("Non-JSON line in stream: %r", line)
                     continue
     except requests.exceptions.RequestException as e:
         logger.exception("Error during Ollama streaming: %s", e)
-        yield f"[error: {e}]"
+        yield {"chunk": "", "done": True, "error": str(e)}
 
 
 # ==============================
@@ -142,60 +150,110 @@ def check_success(model_output: str, secret: str) -> bool:
 
 
 # ==============================
-# SYNCHRONOUS EXECUTION (used for local testing)
+# STREAMING GAME LOGIC
 # ==============================
-def query_mistral_once(prompt: str, timeout: float = OLLAMA_TIMEOUT, options: Dict[str, Any] = None) -> str:
+def run_level_stream(
+    level: Dict[str, Any], 
+    user_input: str, 
+    options: Optional[Dict[str, Any]] = None, 
+    timeout: float = OLLAMA_TIMEOUT
+) -> Generator[Dict[str, Any], None, None]:
     """
-    Blocking version for single-shot completions (non-streaming).
-    Used in `run_level` for backend validation or CLI demo.
-    """
-    payload = {"model": MODEL_NAME, "prompt": prompt, "stream": False}
-    if options:
-        payload["options"] = options
-
-    try:
-        r = requests.post(OLLAMA_URL, json=payload, timeout=timeout)
-        r.raise_for_status()
-        data = r.json()
-
-        if isinstance(data, dict):
-            if "response" in data:
-                return data["response"].strip()
-            if "choices" in data and data["choices"]:
-                choice = data["choices"][0]
-                return choice.get("message", {}).get("content", choice.get("text", "")).strip()
-        return r.text.strip()
-
-    except requests.exceptions.RequestException as e:
-        logger.exception("Error calling Ollama: %s", e)
-        return f"[error calling model: {e}]"
-
-
-# ==============================
-# MAIN GAME LOGIC
-# ==============================
-def run_level(level: Dict[str, Any], user_input: str, options: Dict[str, Any] = None, timeout: float = OLLAMA_TIMEOUT) -> Dict[str, Any]:
-    """
-    Main entrypoint (non-streaming).
-    This is used by the backend to evaluate if a player succeeded or attempted jailbreaks.
+    Main streaming entrypoint for the game.
+    Yields chunks as they arrive, plus metadata when complete.
+    
+    Yields dictionaries containing:
+    - 'type': 'chunk' | 'complete'
+    - 'data': chunk text or final metadata
     """
     start = time.time()
     prompt = build_prompt(level, user_input)
-    output = query_mistral_once(prompt, timeout=timeout, options=options)
-    success = check_success(output, level.get("secret", ""))
-    detectors = detect_jailbreaks(user_input, output)
+    full_output = ""
+    
+    # Stream the response
+    for token_data in query_mistral_stream(prompt, timeout=timeout, options=options):
+        if token_data.get("error"):
+            yield {
+                "type": "error",
+                "data": token_data["error"]
+            }
+            return
+            
+        chunk = token_data.get("chunk", "")
+        if chunk:
+            full_output += chunk
+            yield {
+                "type": "chunk",
+                "data": chunk
+            }
+        
+        if token_data.get("done"):
+            break
+    
+    # After streaming is complete, analyze results
+    success = check_success(full_output, level.get("secret", ""))
+    detectors = detect_jailbreaks(user_input, full_output)
+    
     meta = {
         "elapsed_sec": round(time.time() - start, 3),
         "model": MODEL_NAME,
         "endpoint": OLLAMA_URL,
+        "success": success,
+        "detectors": detectors,
+        "full_output": full_output
     }
-    result = {"output": output, "success": success, "detectors": detectors, "meta": meta}
-
+    
+    yield {
+        "type": "complete",
+        "data": meta
+    }
+    
     logger.info(
-        "run_level result - success=%s suspicious=%s elapsed=%.3fs",
-        result["success"], result["detectors"]["suspicious"], result["meta"]["elapsed_sec"]
+        "run_level_stream complete - success=%s suspicious=%s elapsed=%.3fs",
+        success, detectors["suspicious"], meta["elapsed_sec"]
     )
-    return result
+
+
+# ==============================
+# NON-STREAMING (for validation/testing)
+# ==============================
+def run_level(
+    level: Dict[str, Any], 
+    user_input: str, 
+    options: Optional[Dict[str, Any]] = None, 
+    timeout: float = OLLAMA_TIMEOUT
+) -> Dict[str, Any]:
+    """
+    Non-streaming version that collects the full output.
+    Used for backend validation or when streaming is not needed.
+    """
+    full_output = ""
+    meta = None
+    
+    for result in run_level_stream(level, user_input, options, timeout):
+        if result["type"] == "chunk":
+            full_output += result["data"]
+        elif result["type"] == "complete":
+            meta = result["data"]
+        elif result["type"] == "error":
+            return {
+                "output": "",
+                "success": False,
+                "error": result["data"],
+                "detectors": {"suspicious": False, "patterns": [], "base64": []},
+                "meta": {"elapsed_sec": 0, "model": MODEL_NAME, "endpoint": OLLAMA_URL}
+            }
+    
+    return {
+        "output": full_output,
+        "success": meta["success"],
+        "detectors": meta["detectors"],
+        "meta": {
+            "elapsed_sec": meta["elapsed_sec"],
+            "model": meta["model"],
+            "endpoint": meta["endpoint"]
+        }
+    }
 
 
 # ==============================
@@ -219,8 +277,15 @@ if __name__ == "__main__":
             print("Goodbye.")
             break
 
-        prompt = build_prompt(demo_level, user_input)
         print("\n--- Streaming Response ---\n")
-        for token in query_mistral_stream(prompt):
-            print(token, end="", flush=True)
-        print("\n\n--- End of Stream ---\n")
+        for result in run_level_stream(demo_level, user_input):
+            if result["type"] == "chunk":
+                print(result["data"], end="", flush=True)
+            elif result["type"] == "complete":
+                meta = result["data"]
+                print(f"\n\n--- Complete ---")
+                print(f"Success: {meta['success']}")
+                print(f"Suspicious: {meta['detectors']['suspicious']}")
+                print(f"Time: {meta['elapsed_sec']}s\n")
+            elif result["type"] == "error":
+                print(f"\n\nError: {result['data']}\n")
