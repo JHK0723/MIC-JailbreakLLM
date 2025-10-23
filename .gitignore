@@ -1,9 +1,9 @@
 ui/
 backend/
-.vscode/
 ui/
 backend/
 venv
-.env
 __pycache__/
 jailbreak.db
+config.bat
+node_modules

@@ -236,9 +236,13 @@ with st.expander("🧩 Validate Extracted Password"):
     if st.button("⚡ Verify"):
         try:
             r = requests.post(
-                API_VALIDATE, 
-                json={"team_id": st.session_state.team_id, "password": pwd}, 
-                timeout=10
+                API_VALIDATE,
+                json={
+                    "team_id": st.session_state.team_id,
+                    "level": st.session_state.current_level,   # <- add this
+                    "password": pwd,
+                },
+                timeout=10,
             )
             if r.status_code == 200:
                 data = r.json()
@@ -246,8 +250,12 @@ with st.expander("🧩 Validate Extracted Password"):
                     st.success("✅ Password valid — Level breached!")
                     st.session_state.successful_validations += 1
                     st.session_state.current_level += 1
+                    # Optionally append a system message:
+                    append_history("assistant", f"🧩 Level {st.session_state.current_level - 1} breached.")
                 else:
                     st.error("❌ Invalid password — try again.")
+            elif r.status_code != 200:
+                st.error(f"Server error: {r.status_code} — {r.text}")
             else:
                 st.error(f"Server error: {r.status_code}")
         except Exception as e:
