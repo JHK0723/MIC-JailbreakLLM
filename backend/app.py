@@ -9,9 +9,14 @@ from dotenv import load_dotenv
 
 # Local imports
 from models.level1 import (
-    build_prompt,
+    build_prompt as build_prompt_ollama,
     query_mistral_stream,
     run_level,
+)
+from models.openai_model import (
+    build_prompt as build_prompt_openai,
+    query_openai_stream,
+    run_level as run_level_openai,
 )
 from .schema import SubmitRequest, ValidateRequest
 from database.db import jbdatabase
@@ -42,6 +47,10 @@ if missing:
     logger.warning(f"⚠️ Missing LEVEL_PASSWORDS for levels: {missing}. Using None placeholders.")
 
 GAME_TIMEOUT_SEC = int(os.getenv("GAME_TIMEOUT_SEC", "3600"))  # default 1 hour
+
+# Determine which model to use based on environment variable
+BACKEND_MODEL = os.getenv("BACKEND_MODEL", "ollama").lower()  # 'ollama' or 'openai'
+logger.info(f"Using model backend: {BACKEND_MODEL}")
 
 # ==============================
 # LEVEL DEFINITIONS
@@ -156,15 +165,23 @@ async def submit_prompt(req: SubmitRequest):
     except Exception:
         logger.exception("Failed to persist prompt (non-fatal)")
 
-    prompt = build_prompt(level_config, req.text)
     async def stream_model():
-            """Async generator to relay Ollama stream → SSE to frontend."""
+            """Async generator to relay model stream → SSE to frontend."""
             try:
-                for chunk in query_mistral_stream(prompt):
-                    # Properly JSON-encode the chunk before sending
-                    import json
-                    yield f"data: {json.dumps(chunk)}\n\n"
-                    await asyncio.sleep(0)  # Yield control
+                import json
+                
+                # Select the appropriate model based on BACKEND_MODEL environment variable
+                if BACKEND_MODEL == "openai":
+                    prompt = build_prompt_openai(level_config, req.text)
+                    for chunk in query_openai_stream(prompt):
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        await asyncio.sleep(0)  # Yield control
+                else:  # default to ollama
+                    prompt = build_prompt_ollama(level_config, req.text)
+                    for chunk in query_mistral_stream(prompt):
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        await asyncio.sleep(0)  # Yield control
+                
                 yield "data: [DONE]\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
