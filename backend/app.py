@@ -94,7 +94,8 @@ prompts_store: Dict[str, Dict[int, Optional[str]]] = {}  # team_id -> {level: pr
 # HELPERS
 # ==============================
 def _ensure_started(team_id: str):
-    if team_id not in start_times:
+    if team_id not in start_times:  
+        logger.warning(f"Team {team_id} has not started yet.")
         raise HTTPException(status_code=400, detail="Team has not started. Call /start to begin.")
 
 
@@ -220,6 +221,7 @@ async def validate_password(req: ValidateRequest):
             start = start_times.pop(req.team_id, None)
             end = datetime.now(timezone.utc)
             total_sec = (end - start).total_seconds() if start else 0
+            logger.info("Finalizing team=%s start=%s end=%s total_sec=%s", req.team_id, start, end, total_sec)
             try:
                 asyncio.create_task(asyncio.to_thread(db.finalize_team, req.team_id, total_sec, prompts_store.get(req.team_id)))
             except Exception:
