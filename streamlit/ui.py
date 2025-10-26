@@ -71,6 +71,7 @@ def start_game_if_needed(timeout=3):
         resp = requests.post(API_START, json={"team_id": st.session_state.team_id}, timeout=timeout)
         if resp.status_code == 200:
             st.session_state.started = True
+            st.session_state.start_time = time.time()
             return True
         else:
             st.warning(f"Could not initialize session — {resp.status_code}")
@@ -260,5 +261,27 @@ with st.expander("🧩 Validate Extracted Password"):
                 st.error(f"Server error: {r.status_code}")
         except Exception as e:
             st.error(f"Connection error: {e}")
+
+# ===========================
+# END SCREEN (after Level 4)
+# ===========================
+if st.session_state.successful_validations >= 4:
+    st.markdown("""
+    <div style="text-align:center; padding:60px 20px; background:linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); border-radius:30px; box-shadow:0 4px 15px rgba(0,0,0,0.3); margin-top:50px;">
+        <h1 style="font-size:2.2rem; color:#00d4ff;">🎯 Mission Complete!</h1>
+        <p style="font-size:1.2rem; color:#e6f1ff;">All security layers successfully breached.</p>
+        <p style="font-size:1.2rem; margin-top:20px; color:#00cfff;">⏱️ Total Time Taken: 
+            <b>{time_taken}</b> seconds
+        </p>
+        <p style="font-size:1rem; margin-top:20px; color:#b0b9c9;">Thank you for participating in the Prompt Injection Challenge.</p>
+    </div>
+    """.format(
+        time_taken=int(time.time() - st.session_state.get("start_time", time.time()))
+    ), unsafe_allow_html=True)
+
+    if st.button("🔁 Restart Game"):
+        st.session_state.clear()
+        st.rerun()
+
 
 st.caption("Made for CTF practice • Ethical hacking sandbox • Streamlit Chat Edition 💬")
