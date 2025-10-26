@@ -157,18 +157,17 @@ async def submit_prompt(req: SubmitRequest):
         logger.exception("Failed to persist prompt (non-fatal)")
 
     prompt = build_prompt(level_config, req.text)
-
     async def stream_model():
-        """Async generator to relay Ollama stream → SSE to frontend."""
-        try:
-            for chunk in query_mistral_stream(prompt):
-                # Send data in SSE format
-                yield f"data: {chunk}\n\n"
-                await asyncio.sleep(0)  # Yield control
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            yield f"data: [ERROR] {e}\n\n"
-
+            """Async generator to relay Ollama stream → SSE to frontend."""
+            try:
+                for chunk in query_mistral_stream(prompt):
+                    # Properly JSON-encode the chunk before sending
+                    import json
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    await asyncio.sleep(0)  # Yield control
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
     return StreamingResponse(stream_model(), media_type="text/event-stream")
 
 @app.post("/attack")
