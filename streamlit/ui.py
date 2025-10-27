@@ -51,7 +51,7 @@ API_START = os.getenv("API_START", st.secrets.get("API_START", "http://127.0.0.1
 # ----------------------
 # Session defaults
 # ----------------------
-for key, val in {
+defaults = {
     "history": [],
     "team_id": "JHK",
     "current_level": 1,
@@ -59,14 +59,16 @@ for key, val in {
     "attempts": 0,
     "successful_validations": 0,
     "max_history": 200,
-}.items():
+    "prompt_locked": False  # IMPROVEMENT 2.1: Add lock state
+}
+for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
 # ----------------------
 # Helper functions
 # ----------------------
-def start_game_if_needed(timeout=3):
+def start_game_if_needed(timeout=30): # IMPROVEMENT 1: Increase timeout to 30s
     if st.session_state.started:
         return True
     try:
@@ -92,21 +94,29 @@ def append_history(role, text):
 # ----------------------
 with st.sidebar:
     st.title("⚙️ Operator Console")
-    team = st.text_input("Team / Operative ID", value=st.session_state.team_id)
-    st.session_state.team_id = team
+    team = st.text_input(
+        "Team / Operative ID", 
+        value=st.session_state.team_id, 
+        disabled=st.session_state.prompt_locked # IMPROVEMENT 2.2: Disable input
+    )
+    if not st.session_state.prompt_locked:
+        st.session_state.team_id = team
 
-    if st.button("▶️ Init Session"):
+    if st.button("▶️ Init Session", disabled=st.session_state.prompt_locked): # IMPROVEMENT 2.2: Disable button
         if start_game_if_needed():
             st.success("Session initialized — backend ready")
 
-    if st.button("🧹 Clear Chat"):
+    if st.button("🧹 Clear Chat", disabled=st.session_state.prompt_locked): # IMPROVEMENT 2.2: Disable button
         st.session_state.history = []
         st.rerun()
 
     st.markdown("---")
     st.write(f"Attempts: **{st.session_state.attempts}**")
     st.write(f"Breaches: **{st.session_state.successful_validations}**")
-    st.progress(min(1.0, st.session_state.successful_validations / max(1, st.session_state.current_level)))
+    
+    # IMPROVEMENT 3: Fix progress bar logic to divide by total levels (4)
+    st.progress(st.session_state.successful_validations / 4.0) 
+    
     st.caption("Press Enter to send your prompt.")
 
 # ----------------------
@@ -123,7 +133,8 @@ for item in st.session_state.history:
 # ----------------------
 # User input
 # ----------------------
-prompt = st.chat_input("Type your prompt here...")
+# IMPROVEMENT 2.2: Disable chat input while locked
+prompt = st.chat_input("Type your prompt here...", disabled=st.session_state.prompt_locked)
 
 if prompt:
     # Add user message to history and display
@@ -132,11 +143,16 @@ if prompt:
         st.markdown(prompt)
     
     st.session_state.attempts += 1
+    st.session_state.prompt_locked = True # IMPROVEMENT 2.4: Lock inputs
+    st.rerun() # Rerun to show disabled inputs immediately
 
+# IMPROVEMENT 2.4: Create a separate block to run only after the rerun
+if st.session_state.prompt_locked and not prompt:
     if not start_game_if_needed():
         with st.chat_message("assistant"):
             st.markdown("⚠️ Backend unreachable — try initializing session.")
         append_history("assistant", "⚠️ Backend unreachable — try initializing session.")
+        st.session_state.prompt_locked = False # Unlock on failure
         st.stop()
 
     # Stream assistant response
@@ -150,7 +166,7 @@ if prompt:
                 json={
                     "team_id": st.session_state.team_id,
                     "level": st.session_state.current_level,
-                    "text": prompt,
+                    "text": st.session_state.history[-1]["text"], # Get prompt from history
                 },
                 stream=True,
                 timeout=180,
@@ -230,19 +246,29 @@ if prompt:
             error_msg = f"⚠️ Error: {str(e)}"
             response_placeholder.markdown(error_msg)
             append_history("assistant", error_msg)
+        finally:
+            st.session_state.prompt_locked = False # IMPROVEMENT 2.4: Unlock inputs
+            st.rerun() # Rerun to re-enable inputs
 
 # ----------------------
 # Validation
 # ----------------------
-with st.expander("🧩 Validate Extracted Password"):
-    pwd = st.text_input("Enter password to verify:")
-    if st.button("⚡ Verify"):
+# IMPROVEMENT 2.3: Disable expander and inputs while locked
+with st.expander("🧩 Validate Extracted Password", expanded=not st.session_state.prompt_locked):
+    if st.session_state.prompt_locked:
+        st.info("Validation is locked while a prompt is running.", icon="🔒")
+
+    pwd = st.text_input(
+        "Enter password to verify:", 
+        disabled=st.session_state.prompt_locked
+    )
+    if st.button("⚡ Verify", disabled=st.session_state.prompt_locked):
         try:
             r = requests.post(
                 API_VALIDATE,
                 json={
                     "team_id": st.session_state.team_id,
-                    "level": st.session_state.current_level,   # <- add this
+                    "level": st.session_state.current_level,
                     "password": pwd,
                 },
                 timeout=10,
@@ -255,6 +281,7 @@ with st.expander("🧩 Validate Extracted Password"):
                     st.session_state.current_level += 1
                     # Optionally append a system message:
                     append_history("assistant", f"🧩 Level {st.session_state.current_level - 1} breached.")
+                    st.rerun()
                 else:
                     st.error("❌ Invalid password — try again.")
             elif r.status_code != 200:
@@ -286,4 +313,4 @@ if st.session_state.successful_validations >= 4:
         st.rerun()
 
 
-st.caption("Made for CTF practice • Ethical hacking sandbox • Streamlit Chat Edition 💬")
+st.caption("MIC Prompt Hack Game")
