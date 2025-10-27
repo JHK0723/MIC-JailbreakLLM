@@ -17,7 +17,7 @@ except ImportError:
 # CONFIGURATION
 # ==============================
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-MODEL_NAME = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
+MODEL_NAME = os.environ.get("OPENAI_MODEL", "gpt-4.0")
 OPENAI_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "180"))
 
 # Configure logging
