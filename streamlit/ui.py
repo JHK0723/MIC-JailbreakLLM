@@ -53,13 +53,13 @@ API_START = os.getenv("API_START", st.secrets.get("API_START", "http://127.0.0.1
 # ----------------------
 defaults = {
     "history": [],
-    "team_id": "JHK",
+    "team_id": "",
     "current_level": 1,
     "started": False,
     "attempts": 0,
     "successful_validations": 0,
     "max_history": 200,
-    "prompt_locked": False  # IMPROVEMENT 2.1: Add lock state
+    "prompt_locked": False
 }
 for key, val in defaults.items():
     if key not in st.session_state:
