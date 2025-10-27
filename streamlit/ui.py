@@ -252,7 +252,7 @@ with st.sidebar:
 st.markdown(
     f"""
     <div class="logo-container">
-        <img src="logo.jpeg" width="150">
+        <img src="https://raw.githubusercontent.com/JHK0723/MIC-JailbreakLLM/f584280d0db940177ec57ef15432ccd013c05559/logo.jpeg" width="150">
     </div>
     """,
     unsafe_allow_html=True
