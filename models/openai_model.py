@@ -18,8 +18,9 @@ except ImportError:
 # ==============================
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 MODEL_NAME = os.environ.get("OPENAI_MODEL", "gpt-4o")
-OPENAI_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "180"))
+# h
 
+OPENAI_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "180"))
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s - %(message)s")
 logger = logging.getLogger("openai_model")
