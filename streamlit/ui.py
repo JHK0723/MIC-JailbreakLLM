@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 import time
@@ -42,9 +43,10 @@ st.markdown("""
 # ----------------------
 # API endpoints
 # ----------------------
-API_URL = st.secrets.get("API_URL", "http://127.0.0.1:8000/submit/prompt")
-API_VALIDATE = st.secrets.get("API_VALIDATE", "http://127.0.0.1:8000/submit/validate")
-API_START = st.secrets.get("API_START", "http://127.0.0.1:8000/start")
+
+API_URL = os.getenv("API_URL", st.secrets.get("API_URL", "http://127.0.0.1:8000/submit/prompt"))
+API_VALIDATE = os.getenv("API_VALIDATE", st.secrets.get("API_VALIDATE", "http://127.0.0.1:8000/submit/validate"))
+API_START = os.getenv("API_START", st.secrets.get("API_START", "http://127.0.0.1:8000/start"))
 
 # ----------------------
 # Session defaults
