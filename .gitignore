@@ -7,3 +7,4 @@ venv
 .env
 __pycache__/
 jailbreak.db
+secrets.toml
