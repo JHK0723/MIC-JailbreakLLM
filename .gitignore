@@ -1,10 +1,10 @@
 ui/
 backend/
-.vscode/
 ui/
 backend/
 venv
-.env
 __pycache__/
 jailbreak.db
 secrets.toml
+config.bat
+node_modules
